@@ -1,0 +1,66 @@
+import React, { useState } from 'react';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { ThemeProvider } from './contexts/ThemeContext';
+import { AuthProvider } from './contexts/AuthContext';
+import Header from './components/Header';
+import Sidebar from './components/Sidebar';
+import HomePage from './pages/HomePage';
+import VideoPlayerPage from './pages/VideoPlayerPage';
+import LoginPage from './pages/LoginPage';
+
+function App() {
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const handleSearch = (query: string) => {
+    setSearchQuery(query);
+  };
+
+  const handleMenuToggle = () => {
+    setSidebarOpen(!sidebarOpen);
+  };
+
+  const handleSidebarClose = () => {
+    setSidebarOpen(false);
+  };
+
+  return (
+    <ThemeProvider>
+      <AuthProvider>
+        <Router>
+          <div className="min-h-screen bg-white dark:bg-gray-900 text-gray-900 dark:text-white">
+            <Routes>
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/register" element={<LoginPage />} />
+              <Route path="*" element={
+                <div className="flex flex-col h-screen">
+                  <Header onSearch={handleSearch} onMenuToggle={handleMenuToggle} />
+                  <div className="flex flex-1 overflow-hidden">
+                    <Sidebar isOpen={sidebarOpen} onClose={handleSidebarClose} />
+                    <main className="flex-1 overflow-y-auto">
+                      <Routes>
+                        <Route path="/" element={<HomePage searchQuery={searchQuery} />} />
+                        <Route path="/trending" element={<HomePage searchQuery={searchQuery} />} />
+                        <Route path="/subscriptions" element={<HomePage searchQuery={searchQuery} />} />
+                        <Route path="/watch/:id" element={<VideoPlayerPage />} />
+                        <Route path="/channel/:name" element={<HomePage searchQuery={searchQuery} />} />
+                        <Route path="/category/:category" element={<HomePage searchQuery={searchQuery} />} />
+                        <Route path="/watch-later" element={<HomePage searchQuery={searchQuery} />} />
+                        <Route path="/liked" element={<HomePage searchQuery={searchQuery} />} />
+                        <Route path="/playlists" element={<HomePage searchQuery={searchQuery} />} />
+                        <Route path="/profile" element={<HomePage searchQuery={searchQuery} />} />
+                        <Route path="/settings" element={<HomePage searchQuery={searchQuery} />} />
+                      </Routes>
+                    </main>
+                  </div>
+                </div>
+              } />
+            </Routes>
+          </div>
+        </Router>
+      </AuthProvider>
+    </ThemeProvider>
+  );
+}
+
+export default App;

@@ -1,0 +1,29 @@
+services:
+  service_app:
+    image: node:20-alpine
+    container_name: service-youtube
+    working_dir: /usr/src/app
+    restart: unless-stopped
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0 --port 5173"
+    volumes:
+      - ./:/usr/src/app
+    ports:
+      - "5173:5173"
+    environment:
+      - NODE_ENV=development
+    networks:
+      - traefik
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.youtubesrv.rule=Host(`youtube.banglade.sh`)"
+      - "traefik.http.routers.youtubesrv.entrypoints=websecure"
+      - "traefik.http.routers.youtubesrv.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.youtubesrv-http.rule=Host(`youtube.banglade.sh`)"
+      - "traefik.http.routers.youtubesrv-http.entrypoints=web"
+      - "traefik.http.routers.youtubesrv-http.middlewares=https-redirect"
+      - "traefik.http.services.youtubesrv.loadbalancer.server.port=5173"
+      - "traefik.http.middlewares.https-redirect.redirectscheme.scheme=https"
+
+networks:
+  traefik:
+    external: true
