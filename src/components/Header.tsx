@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Search, Menu, User, Moon, Sun, Bell, Settings } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 
 interface HeaderProps {
   onSearch: (query: string) => void;
@@ -14,6 +14,10 @@ const Header: React.FC<HeaderProps> = ({ onSearch, onMenuToggle }) => {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const { isDark, toggleTheme } = useTheme();
   const { user, logout, isAuthenticated } = useAuth();
+  const location = useLocation();
+
+  const currentPath = `${location.pathname}${location.search}` || '/';
+  const loginTarget = location.pathname === '/login' ? '/login' : `/login?redirect=${encodeURIComponent(currentPath)}`;
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -116,7 +120,7 @@ const Header: React.FC<HeaderProps> = ({ onSearch, onMenuToggle }) => {
               </>
             ) : (
               <Link
-                to="/login"
+                to={loginTarget}
                 className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors font-medium"
               >
                 Sign In

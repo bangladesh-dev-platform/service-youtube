@@ -7,6 +7,7 @@ import Sidebar from './components/Sidebar';
 import HomePage from './pages/HomePage';
 import VideoPlayerPage from './pages/VideoPlayerPage';
 import LoginPage from './pages/LoginPage';
+import AuthCallbackPage from './pages/AuthCallbackPage';
 
 function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -32,6 +33,7 @@ function App() {
             <Routes>
               <Route path="/login" element={<LoginPage />} />
               <Route path="/register" element={<LoginPage />} />
+              <Route path="/auth/callback" element={<AuthCallbackPage />} />
               <Route path="*" element={
                 <div className="flex flex-col h-screen">
                   <Header onSearch={handleSearch} onMenuToggle={handleMenuToggle} />

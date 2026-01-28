@@ -1,14 +1,62 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { User } from '../types';
+import { API_BASE_URL, AUTH_UI_BASE_URL } from '../config/env';
+
+interface CompleteLoginPayload {
+  accessToken: string;
+  refreshToken?: string | null;
+}
 
 interface AuthContextType {
   user: User | null;
-  login: (email: string, password: string) => Promise<void>;
-  logout: () => void;
+  accessToken: string | null;
   isAuthenticated: boolean;
+  isLoading: boolean;
+  login: (redirectPath?: string) => void;
+  logout: () => Promise<void>;
+  refreshSession: () => Promise<void>;
+  completeLogin: (payload: CompleteLoginPayload) => Promise<void>;
 }
 
+const ACCESS_TOKEN_KEY = 'bdp_access_token';
+const REFRESH_TOKEN_KEY = 'bdp_refresh_token';
+export const POST_LOGIN_REDIRECT_KEY = 'bdp_post_login_redirect';
+
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+const decodeJwtPayload = (token: string): { exp?: number } | null => {
+  try {
+    const [, payload] = token.split('.');
+    if (!payload) return null;
+    const normalized = payload.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
+    const decoded = atob(padded);
+    return JSON.parse(decoded);
+  } catch {
+    return null;
+  }
+};
+
+const buildAvatarFallback = (displayName: string) => {
+  const name = encodeURIComponent(displayName);
+  return `https://ui-avatars.com/api/?name=${name}&background=ef4444&color=fff`;
+};
+
+const normalizeUser = (payload: any): User => {
+  const displayName = payload?.full_name || payload?.first_name || payload?.email || 'User';
+  return {
+    id: payload?.id ?? '',
+    name: displayName,
+    email: payload?.email ?? '',
+    avatar: payload?.avatar_url ?? buildAvatarFallback(displayName),
+    watchHistory: payload?.watch_history ?? [],
+    favorites: payload?.favorites ?? [],
+    playlists: payload?.playlists ?? [],
+    roles: payload?.roles ?? [],
+    permissions: payload?.permissions ?? [],
+    emailVerified: payload?.email_verified ?? false,
+  };
+};
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
@@ -18,37 +66,245 @@ export const useAuth = () => {
   return context;
 };
 
-// Mock user data
-const mockUser: User = {
-  id: '1',
-  name: 'John Doe',
-  email: 'john@example.com',
-  avatar: 'https://images.pexels.com/photos/220453/pexels-photo-220453.jpeg?auto=compress&cs=tinysrgb&w=400',
-  watchHistory: [],
-  favorites: [],
-  playlists: []
-};
-
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
+  const [accessToken, setAccessToken] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    return localStorage.getItem(ACCESS_TOKEN_KEY);
+  });
+  const [refreshToken, setRefreshToken] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    return localStorage.getItem(REFRESH_TOKEN_KEY);
+  });
+  const [isLoading, setIsLoading] = useState(true);
 
-  const login = async (email: string, password: string) => {
-    // Mock login - in real app, this would call an API
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    setUser(mockUser);
-  };
+  const refreshTimeoutRef = useRef<number | undefined>(undefined);
+  const refreshTokenRef = useRef<string | null>(refreshToken);
 
-  const logout = () => {
+  useEffect(() => {
+    refreshTokenRef.current = refreshToken;
+  }, [refreshToken]);
+
+  const persistTokens = useCallback((nextAccessToken: string, nextRefreshToken?: string | null) => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(ACCESS_TOKEN_KEY, nextAccessToken);
+      if (typeof nextRefreshToken !== 'undefined') {
+        if (nextRefreshToken) {
+          localStorage.setItem(REFRESH_TOKEN_KEY, nextRefreshToken);
+        } else {
+          localStorage.removeItem(REFRESH_TOKEN_KEY);
+        }
+      }
+    }
+
+    setAccessToken(nextAccessToken);
+
+    if (typeof nextRefreshToken !== 'undefined') {
+      setRefreshToken(nextRefreshToken ?? null);
+    }
+  }, []);
+
+  const clearSession = useCallback(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(ACCESS_TOKEN_KEY);
+      localStorage.removeItem(REFRESH_TOKEN_KEY);
+      sessionStorage.removeItem(POST_LOGIN_REDIRECT_KEY);
+    }
+
+    if (refreshTimeoutRef.current) {
+      window.clearTimeout(refreshTimeoutRef.current);
+      refreshTimeoutRef.current = undefined;
+    }
+
+    setAccessToken(null);
+    setRefreshToken(null);
     setUser(null);
-  };
+  }, []);
+
+  const loadUserProfile = useCallback(async (tokenOverride?: string) => {
+    const token = tokenOverride ?? accessToken;
+    if (!token) {
+      throw new Error('Missing access token');
+    }
+
+    const response = await fetch(`${API_BASE_URL}/api/v1/users/me`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      credentials: 'include',
+    });
+
+    const payload = await response.json().catch(() => null);
+
+    if (!response.ok || !payload?.data) {
+      const errorMessage = payload?.error?.message ?? 'Unable to load profile';
+      throw new Error(errorMessage);
+    }
+
+    const normalizedUser = normalizeUser(payload.data);
+    setUser(normalizedUser);
+    return normalizedUser;
+  }, [API_BASE_URL, accessToken]);
+
+  const refreshSession = useCallback(async () => {
+    const token = refreshTokenRef.current;
+    if (!token) {
+      throw new Error('Missing refresh token');
+    }
+
+    const response = await fetch(`${API_BASE_URL}/api/v1/auth/refresh`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ refresh_token: token }),
+      credentials: 'include',
+    });
+
+    const payload = await response.json().catch(() => null);
+
+    if (!response.ok || !payload?.data) {
+      const errorMessage = payload?.error?.message ?? 'Unable to refresh session';
+      throw new Error(errorMessage);
+    }
+
+    const data = payload.data;
+    const newAccessToken: string = data.access_token;
+    const newRefreshToken: string | null = data.refresh_token ?? null;
+
+    persistTokens(newAccessToken, newRefreshToken);
+
+    if (data.user) {
+      setUser(normalizeUser(data.user));
+    } else {
+      await loadUserProfile(newAccessToken);
+    }
+
+    return { accessToken: newAccessToken, refreshToken: newRefreshToken };
+  }, [API_BASE_URL, loadUserProfile, persistTokens]);
+
+  useEffect(() => {
+    if (refreshTimeoutRef.current) {
+      window.clearTimeout(refreshTimeoutRef.current);
+      refreshTimeoutRef.current = undefined;
+    }
+
+    if (!accessToken || !refreshTokenRef.current) {
+      return;
+    }
+
+    const payload = decodeJwtPayload(accessToken);
+    if (!payload?.exp) {
+      return;
+    }
+
+    const expiresAt = payload.exp * 1000;
+    const refreshDelay = Math.max(expiresAt - Date.now() - 60_000, 5_000);
+
+    refreshTimeoutRef.current = window.setTimeout(() => {
+      refreshSession().catch(() => {
+        clearSession();
+      });
+    }, refreshDelay);
+
+    return () => {
+      if (refreshTimeoutRef.current) {
+        window.clearTimeout(refreshTimeoutRef.current);
+        refreshTimeoutRef.current = undefined;
+      }
+    };
+  }, [accessToken, refreshSession, clearSession]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const bootstrap = async () => {
+      if (!accessToken) {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+        return;
+      }
+
+      try {
+        await loadUserProfile(accessToken);
+      } catch (error) {
+        if (refreshTokenRef.current) {
+          try {
+            const tokens = await refreshSession();
+            await loadUserProfile(tokens.accessToken);
+          } catch (innerError) {
+            console.error('Failed to refresh session', innerError);
+            clearSession();
+          }
+        } else {
+          clearSession();
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    bootstrap();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [accessToken, loadUserProfile, refreshSession, clearSession]);
+
+  const login = useCallback((redirectPath?: string) => {
+    if (typeof window === 'undefined') return;
+
+    const desiredPath = redirectPath || `${window.location.pathname}${window.location.search}` || '/';
+    sessionStorage.setItem(POST_LOGIN_REDIRECT_KEY, desiredPath === '/login' ? '/' : desiredPath);
+
+    const loginUrl = new URL(AUTH_UI_BASE_URL);
+    loginUrl.searchParams.set('redirect_url', `${window.location.origin}/auth/callback`);
+
+    window.location.href = loginUrl.toString();
+  }, []);
+
+  const completeLogin = useCallback(async ({ accessToken: token, refreshToken }: CompleteLoginPayload) => {
+    persistTokens(token, typeof refreshToken === 'undefined' ? null : refreshToken);
+    await loadUserProfile(token);
+  }, [loadUserProfile, persistTokens]);
+
+  const logout = useCallback(async () => {
+    const token = refreshTokenRef.current;
+
+    try {
+      if (token) {
+        await fetch(`${API_BASE_URL}/api/v1/auth/logout`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ refresh_token: token }),
+          credentials: 'include',
+        });
+      }
+    } catch (error) {
+      console.warn('Failed to log out cleanly', error);
+    } finally {
+      clearSession();
+    }
+  }, [API_BASE_URL, clearSession]);
+
+  const value = useMemo(() => ({
+    user,
+    accessToken,
+    isAuthenticated: !!user,
+    isLoading,
+    login,
+    logout,
+    refreshSession,
+    completeLogin,
+  }), [user, accessToken, isLoading, login, logout, refreshSession, completeLogin]);
 
   return (
-    <AuthContext.Provider value={{ 
-      user, 
-      login, 
-      logout, 
-      isAuthenticated: !!user 
-    }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );

@@ -23,6 +23,9 @@ export interface User {
   watchHistory: string[];
   favorites: string[];
   playlists: Playlist[];
+  roles?: string[];
+  permissions?: string[];
+  emailVerified?: boolean;
 }
 
 export interface Playlist {
