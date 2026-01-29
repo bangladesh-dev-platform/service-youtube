@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Search, Menu, User, Moon, Sun, Bell, Settings, Languages } from 'lucide-react';
 import { useTheme } from '../contexts/useTheme';
 import { useAuth } from '../contexts/useAuth';
@@ -14,6 +14,8 @@ const Header: React.FC<HeaderProps> = ({ onSearch, onMenuToggle }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showLangMenu, setShowLangMenu] = useState(false);
+  const langMenuRef = useRef<HTMLDivElement>(null);
+  const userMenuRef = useRef<HTMLDivElement>(null);
   const { isDark, toggleTheme } = useTheme();
   const { user, logout, isAuthenticated } = useAuth();
   const location = useLocation();
@@ -26,6 +28,22 @@ const Header: React.FC<HeaderProps> = ({ onSearch, onMenuToggle }) => {
     e.preventDefault();
     onSearch(searchQuery);
   };
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (langMenuRef.current && !langMenuRef.current.contains(event.target as Node)) {
+        setShowLangMenu(false);
+      }
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setShowUserMenu(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   return (
     <header className="sticky top-0 z-50 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 backdrop-blur-sm bg-opacity-95 dark:bg-opacity-95">
@@ -65,7 +83,7 @@ const Header: React.FC<HeaderProps> = ({ onSearch, onMenuToggle }) => {
 
           {/* Right Side Actions */}
           <div className="flex items-center space-x-2">
-            <div className="relative" onMouseLeave={() => setShowLangMenu(false)}>
+            <div className="relative" ref={langMenuRef}>
               <button
                 onClick={() => setShowLangMenu(prev => !prev)}
                 className="flex items-center gap-1 px-3 py-2 bg-gray-100 dark:bg-gray-800 rounded-lg text-sm font-medium"
@@ -103,7 +121,7 @@ const Header: React.FC<HeaderProps> = ({ onSearch, onMenuToggle }) => {
                 <button className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
                   <Bell size={20} />
                 </button>
-                <div className="relative">
+                <div className="relative" ref={userMenuRef}>
                   <button
                     onClick={() => setShowUserMenu(!showUserMenu)}
                     className="flex items-center space-x-2 p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
