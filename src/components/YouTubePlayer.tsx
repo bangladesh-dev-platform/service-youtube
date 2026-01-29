@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 
 interface YouTubePlayerProps {
   videoId: string;
@@ -25,7 +25,7 @@ const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
 }) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
-  const getEmbedUrl = () => {
+  const getEmbedUrl = useCallback(() => {
     const params = new URLSearchParams({
       autoplay: autoplay ? '1' : '0',
       controls: controls ? '1' : '0',
@@ -39,14 +39,14 @@ const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
     });
 
     return `https://www.youtube.com/embed/${videoId}?${params.toString()}`;
-  };
+  }, [autoplay, controls, modestbranding, rel, showinfo, videoId]);
 
   useEffect(() => {
     // Update iframe src when videoId changes
     if (iframeRef.current) {
       iframeRef.current.src = getEmbedUrl();
     }
-  }, [videoId, autoplay, controls, modestbranding, rel, showinfo]);
+  }, [getEmbedUrl]);
 
   return (
     <div className={`relative ${className}`} style={{ width, height }}>

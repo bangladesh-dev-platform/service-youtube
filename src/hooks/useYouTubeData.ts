@@ -1,55 +1,59 @@
-import { useState, useEffect } from 'react';
-import { youtubeApi, YouTubeVideo, YouTubeVideoDetails } from '../services/youtubeApi';
+import { useState, useEffect, useCallback } from 'react';
 import { Video } from '../types';
-import { convertYouTubeVideoToVideo } from '../utils/videoUtils';
+import { videoPortalApi } from '../services/videoPortalApi';
+import { convertPortalVideoToVideo } from '../utils/videoUtils';
 
-export const useYouTubeSearch = (query: string, enabled: boolean = true) => {
+export const useVideoSearch = (query: string, enabled: boolean = true) => {
   const [videos, setVideos] = useState<Video[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [nextPageToken, setNextPageToken] = useState<string | undefined>();
+  const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
 
-  const searchVideos = async (searchQuery: string, pageToken?: string) => {
-    if (!searchQuery.trim()) {
-      setVideos([]);
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-
-    try {
-      const result = await youtubeApi.searchVideos(searchQuery, 25, pageToken);
-      const convertedVideos = result.videos.map(convertYouTubeVideoToVideo);
-      
-      if (pageToken) {
-        setVideos(prev => [...prev, ...convertedVideos]);
-      } else {
-        setVideos(convertedVideos);
+  const fetchPage = useCallback(
+    async (nextPage: number, append: boolean) => {
+      if (!query.trim()) {
+        setVideos([]);
+        setHasMore(false);
+        return;
       }
-      
-      setNextPageToken(result.nextPageToken);
-      setHasMore(!!result.nextPageToken);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to search videos');
-      if (!pageToken) setVideos([]);
-    } finally {
-      setLoading(false);
-    }
-  };
 
-  const loadMore = () => {
-    if (nextPageToken && !loading) {
-      searchVideos(query, nextPageToken);
-    }
-  };
+      setLoading(true);
+      setError(null);
+
+      try {
+        const result = await videoPortalApi.search({ query, page: nextPage });
+        const mapped = result.items.map(convertPortalVideoToVideo);
+        setVideos(prev => (append ? [...prev, ...mapped] : mapped));
+        setHasMore(mapped.length > 0 && mapped.length >= (result.limit ?? 0));
+        setPage(nextPage);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to search videos');
+        if (!append) {
+          setVideos([]);
+        }
+        setHasMore(false);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [query]
+  );
 
   useEffect(() => {
     if (enabled && query) {
-      searchVideos(query);
+      fetchPage(1, false);
+    } else {
+      setVideos([]);
+      setHasMore(false);
     }
-  }, [query, enabled]);
+  }, [query, enabled, fetchPage]);
+
+  const loadMore = () => {
+    if (!loading && hasMore) {
+      fetchPage(page + 1, true);
+    }
+  };
 
   return { videos, loading, error, loadMore, hasMore };
 };
@@ -63,9 +67,8 @@ export const useTrendingVideos = () => {
     const fetchTrending = async () => {
       try {
         setLoading(true);
-        const trendingVideos = await youtubeApi.getTrendingVideos('BD', 50);
-        const convertedVideos = trendingVideos.map(convertYouTubeVideoToVideo);
-        setVideos(convertedVideos);
+        const result = await videoPortalApi.getFeed({ limit: 24 });
+        setVideos(result.items.map(convertPortalVideoToVideo));
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to fetch trending videos');
       } finally {
@@ -90,11 +93,11 @@ export const useVideoDetails = (videoId: string) => {
 
       try {
         setLoading(true);
-        const videoDetails = await youtubeApi.getVideoDetails(videoId);
-        const convertedVideo = convertYouTubeVideoToVideo(videoDetails);
-        setVideo(convertedVideo);
+        const data = await videoPortalApi.getVideo(videoId);
+        setVideo(convertPortalVideoToVideo(data));
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to fetch video details');
+        setVideo(null);
       } finally {
         setLoading(false);
       }
@@ -117,11 +120,14 @@ export const useRelatedVideos = (videoId: string) => {
 
       try {
         setLoading(true);
-        const relatedVideos = await youtubeApi.getRelatedVideos(videoId, 20);
-        const convertedVideos = relatedVideos.map(convertYouTubeVideoToVideo);
-        setVideos(convertedVideos);
+        const result = await videoPortalApi.getFeed({ limit: 12 });
+        const mapped = result.items
+          .filter(item => item.id !== videoId)
+          .map(convertPortalVideoToVideo);
+        setVideos(mapped);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to fetch related videos');
+        setVideos([]);
       } finally {
         setLoading(false);
       }
@@ -139,22 +145,21 @@ export const useVideosByCategory = (categoryId: string) => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetchVideosByCategory = async () => {
-      if (!categoryId) return;
-
+    const fetchByCategory = async () => {
       try {
         setLoading(true);
-        const categoryVideos = await youtubeApi.getVideosByCategory(categoryId, 25);
-        const convertedVideos = categoryVideos.map(convertYouTubeVideoToVideo);
-        setVideos(convertedVideos);
+        const params = categoryId && categoryId !== 'all' ? { category: categoryId } : {};
+        const result = await videoPortalApi.getFeed(params);
+        setVideos(result.items.map(convertPortalVideoToVideo));
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to fetch videos by category');
+        setVideos([]);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchVideosByCategory();
+    fetchByCategory();
   }, [categoryId]);
 
   return { videos, loading, error };

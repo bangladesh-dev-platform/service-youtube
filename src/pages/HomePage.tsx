@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import CategoryFilter from '../components/CategoryFilter';
 import VideoGrid from '../components/VideoGrid';
 import { Video } from '../types';
-import { useTrendingVideos, useYouTubeSearch, useVideosByCategory } from '../hooks/useYouTubeData';
+import { useTrendingVideos, useVideoSearch, useVideosByCategory } from '../hooks/useYouTubeData';
+import { useI18n } from '../i18n';
 
 interface HomePageProps {
   searchQuery: string;
@@ -12,10 +13,11 @@ const HomePage: React.FC<HomePageProps> = ({ searchQuery }) => {
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [displayVideos, setDisplayVideos] = useState<Video[]>([]);
   const [loading, setLoading] = useState(false);
+  const { t } = useI18n();
 
   // Hooks for different data sources
   const { videos: trendingVideos, loading: trendingLoading } = useTrendingVideos();
-  const { videos: searchVideos, loading: searchLoading } = useYouTubeSearch(searchQuery, !!searchQuery);
+  const { videos: searchVideos, loading: searchLoading } = useVideoSearch(searchQuery, !!searchQuery);
   const { videos: categoryVideos, loading: categoryLoading } = useVideosByCategory(
     selectedCategory !== 'all' ? selectedCategory : ''
   );
@@ -47,6 +49,20 @@ const HomePage: React.FC<HomePageProps> = ({ searchQuery }) => {
     setSelectedCategory(category);
   };
 
+  const categoryLabelMap: Record<string, string> = {
+    '10': t('category.music'),
+    '20': t('category.gaming'),
+    '24': t('category.entertainment'),
+    '28': t('category.science'),
+    '27': t('category.education'),
+    '17': t('category.sports'),
+    '25': t('category.news'),
+    '26': t('category.howto'),
+    '23': t('category.comedy'),
+  };
+
+  const selectedCategoryName = categoryLabelMap[selectedCategory] || t('category.generic');
+
   return (
     <div className="flex-1">
       <CategoryFilter
@@ -57,10 +73,12 @@ const HomePage: React.FC<HomePageProps> = ({ searchQuery }) => {
       {searchQuery && (
         <div className="px-6 py-4">
           <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-            Search results for "{searchQuery}"
+            {t('home.searchHeading', { term: searchQuery })}
           </h2>
           <p className="text-gray-600 dark:text-gray-400 mt-1">
-            {displayVideos.length} {displayVideos.length === 1 ? 'result' : 'results'}
+            {displayVideos.length === 1
+              ? t('home.resultsSingle', { count: displayVideos.length })
+              : t('home.resultsMany', { count: displayVideos.length })}
           </p>
         </div>
       )}
@@ -68,10 +86,10 @@ const HomePage: React.FC<HomePageProps> = ({ searchQuery }) => {
       {!searchQuery && selectedCategory === 'all' && (
         <div className="px-6 py-4">
           <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-            Trending Videos
+            {t('home.trendingTitle')}
           </h2>
           <p className="text-gray-600 dark:text-gray-400 mt-1">
-            Popular videos from around the world
+            {t('home.trendingSubtitle')}
           </p>
         </div>
       )}
@@ -79,18 +97,10 @@ const HomePage: React.FC<HomePageProps> = ({ searchQuery }) => {
       {!searchQuery && selectedCategory !== 'all' && (
         <div className="px-6 py-4">
           <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-            {selectedCategory === '10' ? 'Music' :
-             selectedCategory === '20' ? 'Gaming' :
-             selectedCategory === '24' ? 'Entertainment' :
-             selectedCategory === '28' ? 'Science & Technology' :
-             selectedCategory === '27' ? 'Education' :
-             selectedCategory === '17' ? 'Sports' :
-             selectedCategory === '25' ? 'News & Politics' :
-             selectedCategory === '26' ? 'Howto & Style' :
-             selectedCategory === '23' ? 'Comedy' : 'Category'} Videos
+            {t('home.categoryTitle', { category: selectedCategoryName })}
           </h2>
           <p className="text-gray-600 dark:text-gray-400 mt-1">
-            Popular videos in this category
+            {t('home.categorySubtitle')}
           </p>
         </div>
       )}
@@ -115,13 +125,12 @@ const HomePage: React.FC<HomePageProps> = ({ searchQuery }) => {
             </svg>
           </div>
           <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-            No videos found
+            {t('home.emptyTitle')}
           </h3>
           <p className="text-gray-600 dark:text-gray-400">
             {searchQuery 
-              ? 'Try adjusting your search terms or browse different categories'
-              : 'Unable to load videos. Please check your internet connection and try again.'
-            }
+              ? t('home.emptySearch')
+              : t('home.emptyDefault')}
           </p>
         </div>
       )}

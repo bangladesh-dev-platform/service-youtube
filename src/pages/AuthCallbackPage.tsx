@@ -1,15 +1,18 @@
 import React, { useEffect, useState } from 'react';
 import { Loader2, ShieldCheck, ShieldAlert } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { POST_LOGIN_REDIRECT_KEY, useAuth } from '../contexts/AuthContext';
+import { POST_LOGIN_REDIRECT_KEY } from '../constants/auth';
+import { useAuth } from '../contexts/useAuth';
+import { useI18n } from '../i18n';
 
 const AuthCallbackPage: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { completeLogin } = useAuth();
+  const { t } = useI18n();
 
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
-  const [message, setMessage] = useState('Signing you in...');
+  const [messageKey, setMessageKey] = useState('authCallback.loadingMessage');
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -19,14 +22,14 @@ const AuthCallbackPage: React.FC = () => {
 
     if (!token) {
       setStatus('error');
-      setMessage('Missing token from auth provider. Please try again.');
+      setMessageKey('authCallback.missingToken');
       return;
     }
 
     completeLogin({ accessToken: token, refreshToken })
       .then(() => {
         setStatus('success');
-        setMessage('Signed in successfully. Redirecting...');
+        setMessageKey('authCallback.successMessage');
 
         const redirectTarget =
           (typeof window !== 'undefined' && sessionStorage.getItem(POST_LOGIN_REDIRECT_KEY)) ||
@@ -43,7 +46,7 @@ const AuthCallbackPage: React.FC = () => {
       })
       .catch(() => {
         setStatus('error');
-        setMessage('We could not complete your sign-in. Please try again.');
+        setMessageKey('authCallback.errorMessage');
       });
   }, [completeLogin, location.search, navigate]);
 
@@ -62,9 +65,9 @@ const AuthCallbackPage: React.FC = () => {
       <div className="max-w-md w-full bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-white/60 dark:border-gray-800 p-10 text-center">
         <div className="flex justify-center mb-6">{renderIcon()}</div>
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">
-          {status === 'error' ? 'Sign-in Failed' : 'Finishing Sign-in'}
+          {status === 'error' ? t('authCallback.title.error') : t('authCallback.title.success')}
         </h1>
-        <p className="text-gray-600 dark:text-gray-300 mb-8">{message}</p>
+        <p className="text-gray-600 dark:text-gray-300 mb-8">{t(messageKey)}</p>
 
         {status === 'error' && (
           <div className="space-y-3">
@@ -72,13 +75,13 @@ const AuthCallbackPage: React.FC = () => {
               onClick={() => navigate('/login', { replace: true })}
               className="w-full py-3 bg-red-500 text-white rounded-lg font-medium hover:bg-red-600 transition-colors"
             >
-              Back to Login
+              {t('authCallback.button.backToLogin')}
             </button>
             <button
               onClick={() => navigate('/', { replace: true })}
               className="w-full py-3 border border-gray-200 dark:border-gray-700 rounded-lg font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
             >
-              Go Home
+              {t('authCallback.button.home')}
             </button>
           </div>
         )}

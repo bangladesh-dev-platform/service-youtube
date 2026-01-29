@@ -1,44 +1,67 @@
-import { YouTubeVideo, YouTubeVideoDetails } from '../services/youtubeApi';
 import { Video } from '../types';
-import { youtubeApi } from '../services/youtubeApi';
+import { VideoPortalItem } from '../services/videoPortalApi';
 
-export const convertYouTubeVideoToVideo = (ytVideo: YouTubeVideo | YouTubeVideoDetails): Video => {
-  const isVideoDetails = 'statistics' in ytVideo;
-  const videoId = isVideoDetails ? ytVideo.id : ytVideo.id.videoId;
-  
+const FALLBACK_THUMBNAIL = 'https://images.unsplash.com/photo-1458071101515-8f77c109f8f6?auto=format&fit=crop&w=800&q=60';
+
+export const formatRelativeDate = (dateString?: string | null): string => {
+  if (!dateString) return 'Recently added';
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) return 'Recently added';
+
+  const now = Date.now();
+  const diffMs = Math.abs(now - date.getTime());
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffDays < 1) return 'Today';
+  if (diffDays === 1) return 'Yesterday';
+  if (diffDays < 7) return `${diffDays} days ago`;
+  if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
+  if (diffDays < 365) return `${Math.floor(diffDays / 30)} months ago`;
+  return `${Math.floor(diffDays / 365)} years ago`;
+};
+
+export const convertPortalVideoToVideo = (item: VideoPortalItem): Video => {
+  const metadata = item.metadata ?? {};
+  const thumbnail = item.thumbnail_url || metadata.thumbnail_url || FALLBACK_THUMBNAIL;
+  const duration = metadata.duration ?? (typeof item.duration_seconds === 'number' ? formatSeconds(item.duration_seconds) : undefined);
+  const views = metadata.view_count ?? metadata.views ?? undefined;
+  const likeCount = metadata.like_count ?? undefined;
+  const commentCount = metadata.comment_count ?? undefined;
+  const uploadDate = metadata.publish_date ?? item.cached_at ?? item.created_at ?? null;
+  const channelName = item.channel_name || metadata.channel_name || 'Banglade.sh Originals';
+  const channelId = metadata.channel_id || item.source_ref;
+  const tags = Array.isArray(item.tags) ? item.tags : Array.isArray(metadata.tags) ? metadata.tags : [];
+
   return {
-    id: videoId,
-    title: ytVideo.snippet.title,
-    description: ytVideo.snippet.description,
-    thumbnail: ytVideo.snippet.thumbnails.high?.url || ytVideo.snippet.thumbnails.medium.url,
-    duration: isVideoDetails ? youtubeApi.formatDuration(ytVideo.contentDetails.duration) : 'N/A',
-    views: isVideoDetails ? youtubeApi.formatViewCount(ytVideo.statistics.viewCount) : 'N/A',
-    uploadDate: youtubeApi.formatPublishDate(ytVideo.snippet.publishedAt),
-    channelName: ytVideo.snippet.channelTitle,
-    channelAvatar: '', // Will be fetched separately if needed
-    channelId: ytVideo.snippet.channelId,
-    category: 'General',
-    tags: isVideoDetails ? ytVideo.snippet.tags || [] : [],
-    likeCount: isVideoDetails ? youtubeApi.formatViewCount(ytVideo.statistics.likeCount) : undefined,
-    commentCount: isVideoDetails ? youtubeApi.formatViewCount(ytVideo.statistics.commentCount) : undefined
+    id: item.id,
+    title: item.title,
+    description: item.description ?? metadata.description ?? '',
+    thumbnail,
+    duration,
+    views,
+    uploadDate: formatRelativeDate(uploadDate),
+    channelName,
+    channelAvatar: metadata.channel_avatar ?? '',
+    channelId,
+    category: metadata.category ?? 'General',
+    tags,
+    likeCount,
+    commentCount,
+    sourceType: item.source_type,
+    sourceRef: item.source_ref,
+    metadata,
+    cachedAt: item.cached_at ?? null,
   };
 };
 
-export const getYouTubeEmbedUrl = (videoId: string): string => {
-  return `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&modestbranding=1`;
-};
-
-export const getYouTubeThumbnail = (videoId: string, quality: 'default' | 'medium' | 'high' | 'standard' | 'maxres' = 'high'): string => {
-  return `https://img.youtube.com/vi/${videoId}/${quality === 'high' ? 'hqdefault' : quality === 'medium' ? 'mqdefault' : 'default'}.jpg`;
-};
-
-export const isValidYouTubeVideoId = (videoId: string): boolean => {
-  const regex = /^[a-zA-Z0-9_-]{11}$/;
-  return regex.test(videoId);
-};
-
-export const extractVideoIdFromUrl = (url: string): string | null => {
-  const regex = /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/;
-  const match = url.match(regex);
-  return match ? match[1] : null;
+const formatSeconds = (totalSeconds: number): string | undefined => {
+  if (!Number.isFinite(totalSeconds) || totalSeconds <= 0) return undefined;
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes >= 60) {
+    const hours = Math.floor(minutes / 60);
+    const remainingMinutes = minutes % 60;
+    return `${hours}:${remainingMinutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  }
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 };

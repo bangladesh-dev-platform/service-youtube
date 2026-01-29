@@ -1,7 +1,8 @@
 import React from 'react';
-import { Home, TrendingUp, Clock, ThumbsUp, PlaySquare, Settings, ChevronDown } from 'lucide-react';
+import { Home, TrendingUp, PlaySquare, Settings, Bookmark, History } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../contexts/useAuth';
+import { useI18n } from '../i18n';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -11,17 +12,17 @@ interface SidebarProps {
 const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
   const location = useLocation();
   const { isAuthenticated } = useAuth();
+  const { t } = useI18n();
 
   const menuItems = [
-    { icon: Home, label: 'Home', path: '/' },
-    { icon: TrendingUp, label: 'Trending', path: '/trending' },
-    { icon: PlaySquare, label: 'Subscriptions', path: '/subscriptions', auth: true },
+    { icon: Home, label: t('nav.home'), path: '/' },
+    { icon: TrendingUp, label: t('nav.trending'), path: '/trending' },
+    { icon: PlaySquare, label: t('nav.subscriptions'), path: '/subscriptions', auth: true },
   ];
 
   const libraryItems = [
-    { icon: Clock, label: 'Watch Later', path: '/watch-later', auth: true },
-    { icon: ThumbsUp, label: 'Liked Videos', path: '/liked', auth: true },
-    { icon: PlaySquare, label: 'Playlists', path: '/playlists', auth: true },
+    { icon: Bookmark, label: t('nav.bookmarks'), path: '/bookmarks', auth: true },
+    { icon: History, label: t('nav.history'), path: '/history', auth: true },
   ];
 
   const isActive = (path: string) => location.pathname === path;
@@ -71,7 +72,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
               <>
                 <div className="px-6 py-3 mt-6">
                   <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    Library
+                    {t('sidebar.library')}
                   </h3>
                 </div>
                 <nav className="px-3 space-y-1">
@@ -97,14 +98,20 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
             {/* Categories */}
             <div className="px-6 py-3 mt-6">
               <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                Explore
+                {t('sidebar.explore')}
               </h3>
             </div>
             <nav className="px-3 space-y-1">
-              {['Music', 'Gaming', 'News', 'Sports', 'Learning'].map((category) => (
+              {[
+                t('category.music'),
+                t('category.gaming'),
+                t('category.news'),
+                t('category.sports'),
+                t('category.education'),
+              ].map((category, index) => (
                 <Link
                   key={category}
-                  to={`/category/${category.toLowerCase()}`}
+                  to={`/category/${['music','gaming','news','sports','education'][index]}`}
                   onClick={onClose}
                   className="flex items-center px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
                 >
@@ -122,7 +129,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
               className="flex items-center px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
             >
               <Settings size={20} className="mr-3" />
-              Settings
+              {t('nav.settings')}
             </Link>
           </div>
         </div>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { VIDEO_CATEGORIES } from '../types';
+import { useI18n } from '../i18n';
 
 interface CategoryFilterProps {
   selectedCategory: string;
@@ -7,17 +7,18 @@ interface CategoryFilterProps {
 }
 
 const CategoryFilter: React.FC<CategoryFilterProps> = ({ selectedCategory, onCategoryChange }) => {
+  const { t } = useI18n();
   const categories = [
-    { id: 'all', name: 'All' },
-    { id: '10', name: 'Music' },
-    { id: '20', name: 'Gaming' },
-    { id: '24', name: 'Entertainment' },
-    { id: '28', name: 'Science & Technology' },
-    { id: '27', name: 'Education' },
-    { id: '17', name: 'Sports' },
-    { id: '25', name: 'News & Politics' },
-    { id: '26', name: 'Howto & Style' },
-    { id: '23', name: 'Comedy' }
+    { id: 'all', key: 'category.all' },
+    { id: '10', key: 'category.music' },
+    { id: '20', key: 'category.gaming' },
+    { id: '24', key: 'category.entertainment' },
+    { id: '28', key: 'category.science' },
+    { id: '27', key: 'category.education' },
+    { id: '17', key: 'category.sports' },
+    { id: '25', key: 'category.news' },
+    { id: '26', key: 'category.howto' },
+    { id: '23', key: 'category.comedy' }
   ];
 
   return (
@@ -32,7 +33,7 @@ const CategoryFilter: React.FC<CategoryFilterProps> = ({ selectedCategory, onCat
               : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
           }`}
         >
-          {category.name}
+          {t(category.key)}
         </button>
       ))}
     </div>

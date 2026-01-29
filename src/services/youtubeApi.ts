@@ -53,15 +53,21 @@ export interface YouTubeVideoDetails {
     favoriteCount: string;
     commentCount: string;
   };
-  contentDetails: {
-    duration: string;
-    dimension: string;
-    definition: string;
-    caption: string;
-    licensedContent: boolean;
-    contentRating: {};
-    projection: string;
-  };
+    contentDetails: {
+      duration: string;
+      dimension: string;
+      definition: string;
+      caption: string;
+      licensedContent: boolean;
+      contentRating: Record<string, unknown>;
+      projection: string;
+    };
+}
+
+export interface YouTubeCommentThread {
+  id: string;
+  snippet: Record<string, unknown>;
+  replies?: Record<string, unknown>;
 }
 
 export interface YouTubeChannel {
@@ -242,7 +248,7 @@ class YouTubeApiService {
   }
 
   // Get video comments
-  async getVideoComments(videoId: string, maxResults: number = 20): Promise<any[]> {
+  async getVideoComments(videoId: string, maxResults: number = 20): Promise<YouTubeCommentThread[]> {
     try {
       const response = await axios.get(`${BASE_URL}/commentThreads`, {
         params: {
@@ -254,7 +260,7 @@ class YouTubeApiService {
         }
       });
 
-      return response.data.items;
+      return response.data.items as YouTubeCommentThread[];
     } catch (error) {
       console.error('Error fetching comments:', error);
       return []; // Return empty array if comments are disabled

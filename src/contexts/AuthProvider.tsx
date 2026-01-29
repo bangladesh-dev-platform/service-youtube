@@ -1,28 +1,11 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AuthContext, CompleteLoginPayload, RawUserPayload } from './authContext';
 import { User } from '../types';
 import { API_BASE_URL, AUTH_UI_BASE_URL } from '../config/env';
-
-interface CompleteLoginPayload {
-  accessToken: string;
-  refreshToken?: string | null;
-}
-
-interface AuthContextType {
-  user: User | null;
-  accessToken: string | null;
-  isAuthenticated: boolean;
-  isLoading: boolean;
-  login: (redirectPath?: string) => void;
-  logout: () => Promise<void>;
-  refreshSession: () => Promise<void>;
-  completeLogin: (payload: CompleteLoginPayload) => Promise<void>;
-}
+import { POST_LOGIN_REDIRECT_KEY } from '../constants/auth';
 
 const ACCESS_TOKEN_KEY = 'bdp_access_token';
 const REFRESH_TOKEN_KEY = 'bdp_refresh_token';
-export const POST_LOGIN_REDIRECT_KEY = 'bdp_post_login_redirect';
-
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const decodeJwtPayload = (token: string): { exp?: number } | null => {
   try {
@@ -42,7 +25,7 @@ const buildAvatarFallback = (displayName: string) => {
   return `https://ui-avatars.com/api/?name=${name}&background=ef4444&color=fff`;
 };
 
-const normalizeUser = (payload: any): User => {
+const normalizeUser = (payload?: RawUserPayload | null): User => {
   const displayName = payload?.full_name || payload?.first_name || payload?.email || 'User';
   return {
     id: payload?.id ?? '',
@@ -56,14 +39,6 @@ const normalizeUser = (payload: any): User => {
     permissions: payload?.permissions ?? [],
     emailVerified: payload?.email_verified ?? false,
   };
-};
-
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
 };
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -144,7 +119,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const normalizedUser = normalizeUser(payload.data);
     setUser(normalizedUser);
     return normalizedUser;
-  }, [API_BASE_URL, accessToken]);
+  }, [accessToken]);
 
   const refreshSession = useCallback(async () => {
     const token = refreshTokenRef.current;
@@ -181,7 +156,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     return { accessToken: newAccessToken, refreshToken: newRefreshToken };
-  }, [API_BASE_URL, loadUserProfile, persistTokens]);
+  }, [loadUserProfile, persistTokens]);
 
   useEffect(() => {
     if (refreshTimeoutRef.current) {
@@ -229,6 +204,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       try {
         await loadUserProfile(accessToken);
       } catch (error) {
+        console.error('Initial profile load failed', error);
         if (refreshTokenRef.current) {
           try {
             const tokens = await refreshSession();
@@ -290,22 +266,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
       clearSession();
     }
-  }, [API_BASE_URL, clearSession]);
+  }, [clearSession]);
 
-  const value = useMemo(() => ({
-    user,
-    accessToken,
-    isAuthenticated: !!user,
-    isLoading,
-    login,
-    logout,
-    refreshSession,
-    completeLogin,
-  }), [user, accessToken, isLoading, login, logout, refreshSession, completeLogin]);
-
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
+  const value = useMemo(
+    () => ({
+      user,
+      accessToken,
+      isAuthenticated: !!user,
+      isLoading,
+      login,
+      logout,
+      refreshSession,
+      completeLogin,
+    }),
+    [user, accessToken, isLoading, login, logout, refreshSession, completeLogin]
   );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { Search, Menu, User, Moon, Sun, Bell, Settings } from 'lucide-react';
-import { useTheme } from '../contexts/ThemeContext';
-import { useAuth } from '../contexts/AuthContext';
+import { Search, Menu, User, Moon, Sun, Bell, Settings, Languages } from 'lucide-react';
+import { useTheme } from '../contexts/useTheme';
+import { useAuth } from '../contexts/useAuth';
 import { Link, useLocation } from 'react-router-dom';
+import { useI18n } from '../i18n';
 
 interface HeaderProps {
   onSearch: (query: string) => void;
@@ -12,9 +13,11 @@ interface HeaderProps {
 const Header: React.FC<HeaderProps> = ({ onSearch, onMenuToggle }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showLangMenu, setShowLangMenu] = useState(false);
   const { isDark, toggleTheme } = useTheme();
   const { user, logout, isAuthenticated } = useAuth();
   const location = useLocation();
+  const { lang, setLang, t } = useI18n();
 
   const currentPath = `${location.pathname}${location.search}` || '/';
   const loginTarget = location.pathname === '/login' ? '/login' : `/login?redirect=${encodeURIComponent(currentPath)}`;
@@ -41,7 +44,7 @@ const Header: React.FC<HeaderProps> = ({ onSearch, onMenuToggle }) => {
                 <span className="text-white font-bold text-sm">SV</span>
               </div>
               <span className="font-bold text-xl text-gray-900 dark:text-white hidden sm:block">
-                BanglaTube
+                {t('app.name')}
               </span>
             </Link>
           </div>
@@ -53,7 +56,7 @@ const Header: React.FC<HeaderProps> = ({ onSearch, onMenuToggle }) => {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search videos..."
+                placeholder={t('search.placeholder')}
                 className="w-full px-4 py-2 pl-10 pr-4 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-full focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all"
               />
               <Search className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
@@ -62,10 +65,35 @@ const Header: React.FC<HeaderProps> = ({ onSearch, onMenuToggle }) => {
 
           {/* Right Side Actions */}
           <div className="flex items-center space-x-2">
+            <div className="relative" onMouseLeave={() => setShowLangMenu(false)}>
+              <button
+                onClick={() => setShowLangMenu(prev => !prev)}
+                className="flex items-center gap-1 px-3 py-2 bg-gray-100 dark:bg-gray-800 rounded-lg text-sm font-medium"
+              >
+                <Languages size={16} />
+                {lang === 'bn' ? t('lang.name.bn') : t('lang.name.en')}
+              </button>
+              {showLangMenu && (
+                <div className="absolute right-0 mt-2 w-32 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg overflow-hidden">
+                  {(['bn', 'en'] as const).map(code => (
+                    <button
+                      key={code}
+                      onClick={() => {
+                        setLang(code);
+                        setShowLangMenu(false);
+                      }}
+                      className={`w-full text-left px-3 py-2 text-sm ${lang === code ? 'bg-red-50 text-red-600' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
+                    >
+                      {code === 'bn' ? t('lang.name.bn') : t('lang.name.en')}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <button
               onClick={toggleTheme}
               className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-              title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+              title={isDark ? t('theme.toggle.light') : t('theme.toggle.dark')}
             >
               {isDark ? <Sun size={20} /> : <Moon size={20} />}
             </button>
@@ -94,7 +122,7 @@ const Header: React.FC<HeaderProps> = ({ onSearch, onMenuToggle }) => {
                         onClick={() => setShowUserMenu(false)}
                       >
                         <User size={16} className="mr-3" />
-                        Profile
+                        {t('nav.profile')}
                       </Link>
                       <Link
                         to="/settings"
@@ -102,7 +130,7 @@ const Header: React.FC<HeaderProps> = ({ onSearch, onMenuToggle }) => {
                         onClick={() => setShowUserMenu(false)}
                       >
                         <Settings size={16} className="mr-3" />
-                        Settings
+                        {t('nav.settings')}
                       </Link>
                       <hr className="my-1 border-gray-200 dark:border-gray-700" />
                       <button
@@ -112,7 +140,7 @@ const Header: React.FC<HeaderProps> = ({ onSearch, onMenuToggle }) => {
                         }}
                         className="flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
                       >
-                        Sign out
+                        {t('nav.signOut')}
                       </button>
                     </div>
                   )}
@@ -121,9 +149,9 @@ const Header: React.FC<HeaderProps> = ({ onSearch, onMenuToggle }) => {
             ) : (
               <Link
                 to={loginTarget}
-                className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors font-medium"
+                 className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors font-medium"
               >
-                Sign In
+                {t('cta.login')}
               </Link>
             )}
           </div>

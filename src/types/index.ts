@@ -3,16 +3,20 @@ export interface Video {
   title: string;
   description: string;
   thumbnail: string;
-  duration: string;
-  views: string;
-  uploadDate: string;
-  channelName: string;
-  channelAvatar: string;
-  channelId: string;
+  duration?: string;
+  views?: string;
+  uploadDate?: string;
+  channelName?: string;
+  channelAvatar?: string;
+  channelId?: string;
   category: string;
   tags: string[];
   likeCount?: string;
   commentCount?: string;
+  sourceType?: string;
+  sourceRef?: string;
+  metadata?: Record<string, unknown> | null;
+  cachedAt?: string | null;
 }
 
 export interface User {

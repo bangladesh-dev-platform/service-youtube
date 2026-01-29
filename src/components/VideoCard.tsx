@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { MoreVertical, Clock, Eye, Calendar, Play } from 'lucide-react';
+import { MoreVertical, Clock, Eye, Play } from 'lucide-react';
 import { Video } from '../types';
 import { Link } from 'react-router-dom';
+import { useI18n } from '../i18n';
 
 interface VideoCardProps {
   video: Video;
@@ -12,6 +13,7 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, isHorizontal = false }) =>
   const [isHovered, setIsHovered] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [imageError, setImageError] = useState(false);
+  const { t } = useI18n();
 
   const handleImageError = () => {
     setImageError(true);
@@ -23,6 +25,11 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, isHorizontal = false }) =>
     }
     return video.thumbnail || `https://img.youtube.com/vi/${video.id}/hqdefault.jpg`;
   };
+
+  const channelInitial = (video.channelName || 'S')[0]?.toUpperCase() ?? 'S';
+  const channelLabel = video.channelName || t('viewer.channelFallback');
+  const viewsLabel = video.views ? `${video.views} ${t('viewer.viewsLabel')}` : null;
+  const uploadDateLabel = video.uploadDate || t('viewer.justNow');
 
   if (isHorizontal) {
     return (
@@ -55,17 +62,17 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, isHorizontal = false }) =>
             </h3>
           </Link>
           <div className="flex items-center gap-2 mt-1 text-xs text-gray-600 dark:text-gray-400">
-            <span className="hover:text-gray-900 dark:hover:text-white transition-colors cursor-pointer">
-              {video.channelName}
-            </span>
-            {video.views !== 'N/A' && (
-              <>
-                <span>•</span>
-                <span>{video.views} views</span>
-              </>
-            )}
-            <span>•</span>
-            <span>{video.uploadDate}</span>
+             <span className="hover:text-gray-900 dark:hover:text-white transition-colors cursor-pointer">
+               {channelLabel}
+             </span>
+             {viewsLabel && (
+               <>
+                  <span>•</span>
+                  <span>{viewsLabel}</span>
+                </>
+              )}
+             <span>•</span>
+             <span>{uploadDateLabel}</span>
           </div>
         </div>
         <button
@@ -115,7 +122,7 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, isHorizontal = false }) =>
           <div className="flex-shrink-0">
             <div className="w-9 h-9 bg-gradient-to-r from-red-500 to-pink-500 rounded-full flex items-center justify-center">
               <span className="text-white font-bold text-xs">
-                {video.channelName.charAt(0).toUpperCase()}
+                {channelInitial}
               </span>
             </div>
           </div>
@@ -126,17 +133,17 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, isHorizontal = false }) =>
               </h3>
             </Link>
             <div className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors mt-1 cursor-pointer">
-              {video.channelName}
+              {channelLabel}
             </div>
             <div className="flex items-center gap-1 text-sm text-gray-600 dark:text-gray-400 mt-1">
-              {video.views !== 'N/A' && (
+              {viewsLabel && (
                 <>
                   <Eye size={14} />
-                  <span>{video.views} views</span>
+                  <span>{viewsLabel}</span>
                   <span>•</span>
                 </>
               )}
-              <span>{video.uploadDate}</span>
+              <span>{uploadDateLabel}</span>
             </div>
           </div>
           <div className="relative">
@@ -150,13 +157,13 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, isHorizontal = false }) =>
               <div className="absolute right-0 mt-1 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-10">
                 <button className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
                   <Clock size={16} className="inline mr-2" />
-                  Save to Watch Later
+                  {t('video.menu.watchLater')}
                 </button>
                 <button className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
-                  Save to Playlist
+                  {t('video.menu.playlist')}
                 </button>
                 <button className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
-                  Share
+                  {t('viewer.share')}
                 </button>
               </div>
             )}
