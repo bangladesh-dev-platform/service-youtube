@@ -57,8 +57,7 @@ const VideoGrid: React.FC<VideoGridProps> = ({ videos, loading = false, hasMore 
       </div>
 
       {hasMore && onLoadMore && (
-        <div className="pb-12 flex flex-col items-center gap-3">
-          <div ref={loadMoreRef} className="h-1 w-full"></div>
+        <div className="pb-12 flex flex-col items-center gap-3" ref={loadMoreRef}>
           <button
             type="button"
             onClick={onLoadMore}
