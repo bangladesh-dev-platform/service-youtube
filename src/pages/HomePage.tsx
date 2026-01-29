@@ -1,7 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import CategoryFilter from '../components/CategoryFilter';
 import VideoGrid from '../components/VideoGrid';
-import { Video } from '../types';
 import { useTrendingVideos, useVideoSearch, useVideosByCategory } from '../hooks/useYouTubeData';
 import { useI18n } from '../i18n';
 
@@ -11,39 +10,23 @@ interface HomePageProps {
 
 const HomePage: React.FC<HomePageProps> = ({ searchQuery }) => {
   const [selectedCategory, setSelectedCategory] = useState('all');
-  const [displayVideos, setDisplayVideos] = useState<Video[]>([]);
-  const [loading, setLoading] = useState(false);
   const { t } = useI18n();
+  const PAGE_SIZE = 24;
 
-  // Hooks for different data sources
-  const { videos: trendingVideos, loading: trendingLoading } = useTrendingVideos();
-  const { videos: searchVideos, loading: searchLoading } = useVideoSearch(searchQuery, !!searchQuery);
-  const { videos: categoryVideos, loading: categoryLoading } = useVideosByCategory(
-    selectedCategory !== 'all' ? selectedCategory : ''
+  const trimmedQuery = searchQuery.trim();
+  const searchActive = trimmedQuery.length > 0;
+  const categoryActive = !searchActive && selectedCategory !== 'all';
+
+  const trending = useTrendingVideos(PAGE_SIZE);
+  const search = useVideoSearch(trimmedQuery, searchActive, PAGE_SIZE);
+  const category = useVideosByCategory(
+    selectedCategory,
+    categoryActive,
+    PAGE_SIZE
   );
 
-  useEffect(() => {
-    // Determine which videos to display based on current state
-    if (searchQuery) {
-      setDisplayVideos(searchVideos);
-      setLoading(searchLoading);
-    } else if (selectedCategory !== 'all') {
-      setDisplayVideos(categoryVideos);
-      setLoading(categoryLoading);
-    } else {
-      setDisplayVideos(trendingVideos);
-      setLoading(trendingLoading);
-    }
-  }, [
-    searchQuery,
-    selectedCategory,
-    searchVideos,
-    categoryVideos,
-    trendingVideos,
-    searchLoading,
-    categoryLoading,
-    trendingLoading
-  ]);
+  const activeSource = searchActive ? search : categoryActive ? category : trending;
+  const { videos, loading, loadingMore, hasMore, loadMore } = activeSource;
 
   const handleCategoryChange = (category: string) => {
     setSelectedCategory(category);
@@ -69,21 +52,21 @@ const HomePage: React.FC<HomePageProps> = ({ searchQuery }) => {
         selectedCategory={selectedCategory}
         onCategoryChange={handleCategoryChange}
       />
-      
-      {searchQuery && (
+       
+      {searchActive && (
         <div className="px-6 py-4">
           <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-            {t('home.searchHeading', { term: searchQuery })}
+            {t('home.searchHeading', { term: trimmedQuery })}
           </h2>
           <p className="text-gray-600 dark:text-gray-400 mt-1">
-            {displayVideos.length === 1
-              ? t('home.resultsSingle', { count: displayVideos.length })
-              : t('home.resultsMany', { count: displayVideos.length })}
+            {videos.length === 1
+              ? t('home.resultsSingle', { count: videos.length })
+              : t('home.resultsMany', { count: videos.length })}
           </p>
         </div>
       )}
 
-      {!searchQuery && selectedCategory === 'all' && (
+      {!searchActive && selectedCategory === 'all' && (
         <div className="px-6 py-4">
           <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
             {t('home.trendingTitle')}
@@ -94,7 +77,7 @@ const HomePage: React.FC<HomePageProps> = ({ searchQuery }) => {
         </div>
       )}
 
-      {!searchQuery && selectedCategory !== 'all' && (
+      {!searchActive && selectedCategory !== 'all' && (
         <div className="px-6 py-4">
           <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
             {t('home.categoryTitle', { category: selectedCategoryName })}
@@ -105,9 +88,15 @@ const HomePage: React.FC<HomePageProps> = ({ searchQuery }) => {
         </div>
       )}
 
-      <VideoGrid videos={displayVideos} loading={loading} />
+      <VideoGrid
+        videos={videos}
+        loading={loading && videos.length === 0}
+        onLoadMore={hasMore ? loadMore : undefined}
+        hasMore={hasMore}
+        isLoadingMore={loadingMore}
+      />
 
-      {displayVideos.length === 0 && !loading && (
+      {videos.length === 0 && !loading && (
         <div className="text-center py-12">
           <div className="text-gray-400 dark:text-gray-600 mb-4">
             <svg
@@ -128,7 +117,7 @@ const HomePage: React.FC<HomePageProps> = ({ searchQuery }) => {
             {t('home.emptyTitle')}
           </h3>
           <p className="text-gray-600 dark:text-gray-400">
-            {searchQuery 
+            {searchActive 
               ? t('home.emptySearch')
               : t('home.emptyDefault')}
           </p>

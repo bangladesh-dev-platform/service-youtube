@@ -1,86 +1,117 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Video } from '../types';
 import { videoPortalApi } from '../services/videoPortalApi';
 import { convertPortalVideoToVideo } from '../utils/videoUtils';
 
-export const useVideoSearch = (query: string, enabled: boolean = true) => {
+const DEFAULT_PAGE_SIZE = 24;
+
+interface PaginatedResult {
+  videos: Video[];
+  loading: boolean;
+  loadingMore: boolean;
+  error: string | null;
+  hasMore: boolean;
+  loadMore: () => void;
+}
+
+const usePaginatedFetcher = (
+  fetcher: (args: { page: number; limit: number }) => Promise<Video[]>,
+  options: { enabled?: boolean; dependencies?: unknown[]; pageSize?: number } = {}
+): PaginatedResult => {
+  const { enabled = true, dependencies = [], pageSize = DEFAULT_PAGE_SIZE } = options;
+  const fetcherRef = useRef(fetcher);
   const [videos, setVideos] = useState<Video[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
 
+  useEffect(() => {
+    fetcherRef.current = fetcher;
+  }, [fetcher]);
+
   const fetchPage = useCallback(
     async (nextPage: number, append: boolean) => {
-      if (!query.trim()) {
+      if (!enabled) {
         setVideos([]);
         setHasMore(false);
         return;
       }
 
-      setLoading(true);
+      if (append) {
+        setLoadingMore(true);
+      } else {
+        setLoading(true);
+      }
       setError(null);
 
       try {
-        const result = await videoPortalApi.search({ query, page: nextPage });
-        const mapped = result.items.map(convertPortalVideoToVideo);
-        setVideos(prev => (append ? [...prev, ...mapped] : mapped));
-        setHasMore(mapped.length > 0 && mapped.length >= (result.limit ?? 0));
+        const items = await fetcherRef.current({ page: nextPage, limit: pageSize });
+        setVideos(prev => (append ? [...prev, ...items] : items));
+        setHasMore(items.length === pageSize);
         setPage(nextPage);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to search videos');
+        const message = err instanceof Error ? err.message : 'Failed to load videos';
+        setError(message);
         if (!append) {
           setVideos([]);
         }
         setHasMore(false);
       } finally {
-        setLoading(false);
+        if (append) {
+          setLoadingMore(false);
+        } else {
+          setLoading(false);
+        }
       }
     },
-    [query]
+    [enabled, pageSize]
   );
 
   useEffect(() => {
-    if (enabled && query) {
+    if (enabled) {
       fetchPage(1, false);
     } else {
       setVideos([]);
       setHasMore(false);
+      setPage(1);
     }
-  }, [query, enabled, fetchPage]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled, fetchPage, pageSize, ...dependencies]);
 
-  const loadMore = () => {
-    if (!loading && hasMore) {
-      fetchPage(page + 1, true);
-    }
-  };
+  const loadMore = useCallback(() => {
+    if (!enabled || loading || loadingMore || !hasMore) return;
+    fetchPage(page + 1, true);
+  }, [enabled, fetchPage, page, loading, loadingMore, hasMore]);
 
-  return { videos, loading, error, loadMore, hasMore };
+  return { videos, loading, loadingMore, error, hasMore, loadMore };
 };
 
-export const useTrendingVideos = () => {
-  const [videos, setVideos] = useState<Video[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const fetchTrending = async () => {
-      try {
-        setLoading(true);
-        const result = await videoPortalApi.getFeed({ limit: 24 });
-        setVideos(result.items.map(convertPortalVideoToVideo));
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to fetch trending videos');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchTrending();
-  }, []);
-
-  return { videos, loading, error };
+export const useVideoSearch = (query: string, enabled: boolean = true, pageSize: number = DEFAULT_PAGE_SIZE): PaginatedResult => {
+  const trimmed = query.trim();
+  return usePaginatedFetcher(
+    async ({ page, limit }) => {
+      if (!trimmed) return [];
+      const result = await videoPortalApi.search({ query: trimmed, page, limit });
+      return result.items.map(convertPortalVideoToVideo);
+    },
+    {
+      enabled: enabled && !!trimmed,
+      dependencies: [trimmed],
+      pageSize,
+    }
+  );
 };
+
+export const useTrendingVideos = (pageSize: number = DEFAULT_PAGE_SIZE): PaginatedResult =>
+  usePaginatedFetcher(
+    async ({ page, limit }) => {
+      const result = await videoPortalApi.getFeed({ page, limit });
+      return result.items.map(convertPortalVideoToVideo);
+    },
+    { pageSize }
+  );
 
 export const useVideoDetails = (videoId: string) => {
   const [video, setVideo] = useState<Video | null>(null);
@@ -139,28 +170,20 @@ export const useRelatedVideos = (videoId: string) => {
   return { videos, loading, error };
 };
 
-export const useVideosByCategory = (categoryId: string) => {
-  const [videos, setVideos] = useState<Video[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const fetchByCategory = async () => {
-      try {
-        setLoading(true);
-        const params = categoryId && categoryId !== 'all' ? { category: categoryId } : {};
-        const result = await videoPortalApi.getFeed(params);
-        setVideos(result.items.map(convertPortalVideoToVideo));
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to fetch videos by category');
-        setVideos([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchByCategory();
-  }, [categoryId]);
-
-  return { videos, loading, error };
-};
+export const useVideosByCategory = (
+  categoryId: string,
+  enabled: boolean = true,
+  pageSize: number = DEFAULT_PAGE_SIZE
+): PaginatedResult =>
+  usePaginatedFetcher(
+    async ({ page, limit }) => {
+      const params = categoryId ? { category: categoryId, page, limit } : { page, limit };
+      const result = await videoPortalApi.getFeed(params);
+      return result.items.map(convertPortalVideoToVideo);
+    },
+    {
+      enabled,
+      dependencies: [categoryId],
+      pageSize,
+    }
+  );
