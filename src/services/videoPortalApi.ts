@@ -98,11 +98,13 @@ const buildQuery = (params: Record<string, string | number | undefined | null>) 
 };
 
 const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
+  const autoHeaders: Record<string, string> = {
+    ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
+    ...(init?.headers ?? {}),
+  };
+
   const response = await fetch(`${API_BASE_URL}${path}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init?.headers ?? {}),
-    },
+    headers: autoHeaders,
     credentials: 'include',
     ...init,
   });
