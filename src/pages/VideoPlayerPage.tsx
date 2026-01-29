@@ -22,25 +22,29 @@ const VideoPlayerPage: React.FC = () => {
   const { videos: relatedVideos, loading: relatedLoading } = useRelatedVideos(id || '');
   const youtubeVideoId = video?.sourceType === 'youtube' ? video.sourceRef : null;
   const portalVideoId = video?.id;
-  const bookmarked = portalVideoId ? isBookmarked(portalVideoId) : false;
+  const effectiveVideoId = portalVideoId ?? id ?? '';
+  const bookmarked = effectiveVideoId ? isBookmarked(effectiveVideoId) : false;
   const { t } = useI18n();
 
   useEffect(() => {
-    if (!portalVideoId || !accessToken) return;
+    if (!effectiveVideoId || !accessToken) return;
 
     videoPortalApi
-      .recordHistory(accessToken, portalVideoId, {
+      .recordHistory(accessToken, effectiveVideoId, {
         positionSeconds: 0,
         context: { source: 'watch_page' },
       })
       .catch(error => {
         console.error('Failed to record history', error);
       });
-  }, [portalVideoId, accessToken]);
+  }, [effectiveVideoId, accessToken]);
 
 
   const handleBookmark = async () => {
-    if (!video) return;
+    if (!video || !effectiveVideoId) {
+      console.warn('Missing video id for bookmarking');
+      return;
+    }
     if (!isAuthenticated) {
       login(`/watch/${video.id}`);
       return;
@@ -48,7 +52,7 @@ const VideoPlayerPage: React.FC = () => {
 
     try {
       setBookmarkSaving(true);
-      await toggleBookmark(video.id);
+      await toggleBookmark(effectiveVideoId);
     } catch (error) {
       console.error('Bookmark failed', error);
     } finally {

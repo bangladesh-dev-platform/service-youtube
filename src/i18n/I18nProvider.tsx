@@ -7,8 +7,7 @@ export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (typeof window === 'undefined') return FALLBACK_LANG;
     const stored = localStorage.getItem('app_lang') as Language | null;
     if (stored && ['en', 'bn'].includes(stored)) return stored;
-    const browserLang = navigator.language?.startsWith('bn') ? 'bn' : 'en';
-    return (browserLang as Language) || FALLBACK_LANG;
+    return FALLBACK_LANG;
   });
 
   const value = useMemo(() => {

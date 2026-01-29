@@ -219,7 +219,7 @@ export const videoPortalApi = {
     return authedRequest<CommentItem>(`/api/v1/video/${videoId}/comments`, token, {
       method: 'POST',
       body: JSON.stringify({
-        text,
+        body: text,
         parent_id: parentId,
       }),
     });
