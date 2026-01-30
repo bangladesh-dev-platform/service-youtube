@@ -1,6 +1,20 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
-import { ThumbsUp, ThumbsDown, Share2, Download, MoreHorizontal, Bell, Bookmark, BookmarkCheck } from 'lucide-react';
+import {
+  ThumbsUp,
+  ThumbsDown,
+  Share2,
+  Download,
+  MoreHorizontal,
+  Bell,
+  Bookmark,
+  BookmarkCheck,
+  Copy,
+  Mail,
+  Facebook,
+  Twitter,
+  MessageCircle,
+} from 'lucide-react';
 import VideoCard from '../components/VideoCard';
 import YouTubePlayer from '../components/YouTubePlayer';
 import { useVideoDetails, useRelatedVideos } from '../hooks/useYouTubeData';
@@ -14,6 +28,11 @@ const VideoPlayerPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const [showDescription, setShowDescription] = useState(false);
   const [bookmarkSaving, setBookmarkSaving] = useState(false);
+  const [shareMenuOpen, setShareMenuOpen] = useState(false);
+  const [shareUrl, setShareUrl] = useState('');
+  const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'error'>('idle');
+  const [canNativeShare, setCanNativeShare] = useState(false);
+  const shareMenuRef = useRef<HTMLDivElement>(null);
 
   const { isAuthenticated, accessToken, login } = useAuth();
   const { isBookmarked, toggleBookmark } = useBookmarks();
@@ -27,6 +46,53 @@ const VideoPlayerPage: React.FC = () => {
   const { t } = useI18n();
 
   useEffect(() => {
+    if (!effectiveVideoId || typeof window === 'undefined') {
+      setShareUrl('');
+      return;
+    }
+    setShareUrl(`${window.location.origin}/watch/${effectiveVideoId}`);
+  }, [effectiveVideoId]);
+
+  useEffect(() => {
+    if (typeof navigator === 'undefined') {
+      setCanNativeShare(false);
+      return;
+    }
+    const nav = navigator as Navigator & { share?: (data?: ShareData) => Promise<void> };
+    setCanNativeShare(typeof nav.share === 'function');
+  }, []);
+
+  useEffect(() => {
+    if (!shareMenuOpen) {
+      return;
+    }
+    const handleClickOutside = (event: MouseEvent) => {
+      if (shareMenuRef.current && !shareMenuRef.current.contains(event.target as Node)) {
+        setShareMenuOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setShareMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [shareMenuOpen]);
+
+  useEffect(() => {
+    if (copyStatus !== 'copied') {
+      return;
+    }
+    const timeoutId = window.setTimeout(() => setCopyStatus('idle'), 2500);
+    return () => window.clearTimeout(timeoutId);
+  }, [copyStatus]);
+
+  useEffect(() => {
     if (!effectiveVideoId || !accessToken) return;
 
     videoPortalApi
@@ -38,6 +104,56 @@ const VideoPlayerPage: React.FC = () => {
         console.error('Failed to record history', error);
       });
   }, [effectiveVideoId, accessToken]);
+
+  const handleCopyLink = async () => {
+    if (!shareUrl) {
+      return;
+    }
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(shareUrl);
+      } else if (typeof document !== 'undefined') {
+        const tempInput = document.createElement('textarea');
+        tempInput.value = shareUrl;
+        tempInput.style.position = 'fixed';
+        tempInput.style.opacity = '0';
+        document.body.appendChild(tempInput);
+        tempInput.focus();
+        tempInput.select();
+        document.execCommand('copy');
+        document.body.removeChild(tempInput);
+      } else {
+        throw new Error('Clipboard unavailable');
+      }
+      setCopyStatus('copied');
+    } catch (error) {
+      console.error('Failed to copy share link', error);
+      setCopyStatus('error');
+    }
+  };
+
+  const handleNativeShare = async () => {
+    if (!shareUrl || typeof navigator === 'undefined') {
+      return;
+    }
+    const nav = navigator as Navigator & { share?: (data?: ShareData) => Promise<void> };
+    if (typeof nav.share !== 'function') {
+      return;
+    }
+    try {
+      await nav.share({
+        title: video.title,
+        text: video.description || video.title,
+        url: shareUrl,
+      });
+      setShareMenuOpen(false);
+    } catch (error) {
+      if ((error as DOMException)?.name === 'AbortError') {
+        return;
+      }
+      console.error('Native share failed', error);
+    }
+  };
 
 
   const handleBookmark = async () => {
@@ -86,6 +202,22 @@ const VideoPlayerPage: React.FC = () => {
       </div>
     );
   }
+
+  const shareTitle = video.title || t('app.name');
+  const encodedShareUrl = shareUrl ? encodeURIComponent(shareUrl) : '';
+  const encodedShareTitle = encodeURIComponent(shareTitle);
+  const emailShareHref = shareUrl
+    ? `mailto:?subject=${encodedShareTitle}&body=${encodeURIComponent(`${shareTitle}\n\n${shareUrl}`)}`
+    : '#';
+  const facebookShareHref = shareUrl
+    ? `https://www.facebook.com/sharer/sharer.php?u=${encodedShareUrl}`
+    : '#';
+  const twitterShareHref = shareUrl
+    ? `https://twitter.com/intent/tweet?url=${encodedShareUrl}&text=${encodedShareTitle}`
+    : '#';
+  const whatsappShareHref = shareUrl
+    ? `https://wa.me/?text=${encodeURIComponent(`${shareTitle} ${shareUrl}`)}`
+    : '#';
 
   return (
     <div className="flex-1 max-w-7xl mx-auto px-4 py-6">
@@ -141,10 +273,82 @@ const VideoPlayerPage: React.FC = () => {
                     <ThumbsDown size={16} />
                   </button>
                 </div>
-                <button className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
-                  <Share2 size={16} />
-                  <span className="text-sm font-medium">{t('viewer.share')}</span>
-                </button>
+                <div className="relative" ref={shareMenuRef}>
+                  <button
+                    className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                    onClick={() => setShareMenuOpen(prev => !prev)}
+                    aria-haspopup="menu"
+                    aria-expanded={shareMenuOpen}
+                  >
+                    <Share2 size={16} />
+                    <span className="text-sm font-medium">{t('viewer.share')}</span>
+                  </button>
+                  {shareMenuOpen && (
+                    <div className="absolute right-0 mt-3 w-64 rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-2xl z-30 p-3">
+                      <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">
+                        {t('viewer.share.menuTitle')}
+                      </p>
+                      <div className="flex flex-col gap-2" role="menu">
+                        {canNativeShare && (
+                          <button
+                            className="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 text-sm font-medium text-gray-900 dark:text-white transition-colors"
+                            onClick={handleNativeShare}
+                          >
+                            <Share2 size={16} />
+                            <span>{t('viewer.share.native')}</span>
+                          </button>
+                        )}
+                        <button
+                          className="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 text-sm font-medium text-gray-900 dark:text-white transition-colors"
+                          onClick={handleCopyLink}
+                        >
+                          <Copy size={16} />
+                          <span>
+                            {copyStatus === 'copied' ? t('viewer.share.copied') : t('viewer.share.copyLink')}
+                          </span>
+                        </button>
+                        <a
+                          className="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 text-sm font-medium text-gray-900 dark:text-white transition-colors"
+                          href={emailShareHref}
+                          onClick={() => setShareMenuOpen(false)}
+                        >
+                          <Mail size={16} />
+                          <span>{t('viewer.share.email')}</span>
+                        </a>
+                        <a
+                          className="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 text-sm font-medium text-gray-900 dark:text-white transition-colors"
+                          href={facebookShareHref}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={() => setShareMenuOpen(false)}
+                        >
+                          <Facebook size={16} />
+                          <span>{t('viewer.share.facebook')}</span>
+                        </a>
+                        <a
+                          className="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 text-sm font-medium text-gray-900 dark:text-white transition-colors"
+                          href={twitterShareHref}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={() => setShareMenuOpen(false)}
+                        >
+                          <Twitter size={16} />
+                          <span>{t('viewer.share.twitter')}</span>
+                        </a>
+                        <a
+                          className="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 text-sm font-medium text-gray-900 dark:text-white transition-colors"
+                          href={whatsappShareHref}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={() => setShareMenuOpen(false)}
+                        >
+                          <MessageCircle size={16} />
+                          <span>{t('viewer.share.whatsapp')}</span>
+                        </a>
+                      </div>
+                    </div>
+                  )}
+                </div>
                 <button className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
                   <Download size={16} />
                   <span className="text-sm font-medium">{t('viewer.download')}</span>
