@@ -21,8 +21,29 @@ import { useVideoDetails, useRelatedVideos } from '../hooks/useYouTubeData';
 import { useAuth } from '../contexts/useAuth';
 import { useBookmarks } from '../contexts/useBookmarks';
 import { videoPortalApi } from '../services/videoPortalApi';
+import type { DownloadFormat } from '../services/videoPortalApi';
 import CommentsSection from '../components/CommentsSection';
 import { useI18n } from '../i18n';
+
+const formatFileSize = (bytes?: number | null): string => {
+  if (bytes === undefined || bytes === null) {
+    return '';
+  }
+  if (bytes === 0) {
+    return '0 B';
+  }
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let size = bytes;
+  let unitIndex = 0;
+
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex += 1;
+  }
+
+  const rounded = size >= 10 || size % 1 === 0 ? size.toFixed(0) : size.toFixed(1);
+  return `${rounded} ${units[unitIndex]}`;
+};
 
 const VideoPlayerPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -33,6 +54,12 @@ const VideoPlayerPage: React.FC = () => {
   const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'error'>('idle');
   const [canNativeShare, setCanNativeShare] = useState(false);
   const shareMenuRef = useRef<HTMLDivElement>(null);
+  const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
+  const [downloadLoading, setDownloadLoading] = useState(false);
+  const [downloadFormats, setDownloadFormats] = useState<DownloadFormat[] | null>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [downloadReason, setDownloadReason] = useState<string | null>(null);
+  const downloadMenuRef = useRef<HTMLDivElement>(null);
 
   const { isAuthenticated, accessToken, login } = useAuth();
   const { isBookmarked, toggleBookmark } = useBookmarks();
@@ -93,6 +120,35 @@ const VideoPlayerPage: React.FC = () => {
   }, [copyStatus]);
 
   useEffect(() => {
+    if (!downloadMenuOpen) {
+      return;
+    }
+    const handleClickOutside = (event: MouseEvent) => {
+      if (downloadMenuRef.current && !downloadMenuRef.current.contains(event.target as Node)) {
+        setDownloadMenuOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setDownloadMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [downloadMenuOpen]);
+
+  useEffect(() => {
+    setDownloadFormats(null);
+    setDownloadReason(null);
+    setDownloadError(null);
+    setDownloadMenuOpen(false);
+  }, [effectiveVideoId]);
+
+  useEffect(() => {
     if (!effectiveVideoId || !accessToken) return;
 
     videoPortalApi
@@ -104,6 +160,55 @@ const VideoPlayerPage: React.FC = () => {
         console.error('Failed to record history', error);
       });
   }, [effectiveVideoId, accessToken]);
+
+  const fetchDownloadFormats = async () => {
+    if (!accessToken || !effectiveVideoId) {
+      return;
+    }
+    setDownloadLoading(true);
+    setDownloadError(null);
+    try {
+      const response = await videoPortalApi.getDownloadFormats(accessToken, effectiveVideoId);
+      setDownloadFormats(response.formats);
+      setDownloadReason(response.noFormatsReason ?? null);
+    } catch (error) {
+      console.error('Failed to load download formats', error);
+      setDownloadError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setDownloadLoading(false);
+    }
+  };
+
+  const handleDownloadClick = () => {
+    if (!video || !effectiveVideoId) {
+      console.warn('Missing video id for downloads');
+      return;
+    }
+    if (!isAuthenticated) {
+      login(`/watch/${video.id}`);
+      return;
+    }
+    setShareMenuOpen(false);
+    setDownloadMenuOpen(prev => {
+      const next = !prev;
+      if (!prev && !downloadFormats && !downloadLoading) {
+        void fetchDownloadFormats();
+      }
+      return next;
+    });
+  };
+
+  const handleDownloadRetry = () => {
+    void fetchDownloadFormats();
+  };
+
+  const handleFormatDownload = (format: DownloadFormat) => {
+    if (!format.downloadUrl) {
+      return;
+    }
+    window.open(format.downloadUrl, '_blank', 'noopener,noreferrer');
+    setDownloadMenuOpen(false);
+  };
 
   const handleCopyLink = async () => {
     if (!shareUrl) {
@@ -276,7 +381,10 @@ const VideoPlayerPage: React.FC = () => {
                 <div className="relative" ref={shareMenuRef}>
                   <button
                     className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-                    onClick={() => setShareMenuOpen(prev => !prev)}
+                    onClick={() => {
+                      setDownloadMenuOpen(false);
+                      setShareMenuOpen(prev => !prev);
+                    }}
                     aria-haspopup="menu"
                     aria-expanded={shareMenuOpen}
                   >
@@ -349,10 +457,92 @@ const VideoPlayerPage: React.FC = () => {
                     </div>
                   )}
                 </div>
-                <button className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
-                  <Download size={16} />
-                  <span className="text-sm font-medium">{t('viewer.download')}</span>
-                </button>
+                <div className="relative" ref={downloadMenuRef}>
+                  <button
+                    className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                    onClick={handleDownloadClick}
+                    aria-haspopup="menu"
+                    aria-expanded={downloadMenuOpen}
+                    title={!isAuthenticated ? t('viewer.download.loginPrompt') : undefined}
+                  >
+                    <Download size={16} />
+                    <span className="text-sm font-medium">{t('viewer.download')}</span>
+                  </button>
+                  {downloadMenuOpen && (
+                    <div className="absolute right-0 mt-3 w-72 rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-2xl z-30 p-3">
+                      <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">
+                        {t('viewer.download.menuTitle')}
+                      </p>
+                      {downloadLoading && (
+                        <div className="space-y-2">
+                          {Array.from({ length: 2 }).map((_, index) => (
+                            <div key={index} className="h-11 bg-gray-100 dark:bg-gray-800 rounded-xl animate-pulse" />
+                          ))}
+                          <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
+                            {t('viewer.download.loading')}
+                          </p>
+                        </div>
+                      )}
+                      {!downloadLoading && downloadError && (
+                        <div className="rounded-xl bg-red-50 dark:bg-red-900/20 text-sm text-red-600 dark:text-red-200 p-3 flex flex-col gap-2">
+                          <span>{t('viewer.download.error')}</span>
+                          <button
+                            className="self-start text-xs font-semibold text-red-600 dark:text-red-200 hover:underline"
+                            onClick={handleDownloadRetry}
+                          >
+                            {t('viewer.download.retry')}
+                          </button>
+                        </div>
+                      )}
+                      {!downloadLoading && !downloadError && downloadFormats && downloadFormats.length === 0 && (
+                        <div className="rounded-xl bg-gray-100 dark:bg-gray-800 text-sm text-gray-700 dark:text-gray-300 p-3">
+                          {downloadReason || t('viewer.download.unavailable')}
+                        </div>
+                      )}
+                      {!downloadLoading && !downloadError && downloadFormats && downloadFormats.length > 0 && (
+                        <div className="flex flex-col gap-2">
+                          {downloadFormats.map(format => {
+                            const primaryLine = [format.label, format.quality, format.container?.toUpperCase()]
+                              .filter(Boolean)
+                              .join(' · ');
+                            const secondaryParts = [
+                              format.codec?.toUpperCase() ?? null,
+                              format.type === 'audio' ? t('viewer.download.audioOnly') : null,
+                              format.sizeBytes ? formatFileSize(format.sizeBytes) : t('viewer.download.sizeUnknown'),
+                            ].filter(Boolean);
+                            return (
+                              <button
+                                key={format.id}
+                                className="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 text-left"
+                                onClick={() => handleFormatDownload(format)}
+                              >
+                                <Download size={16} className="text-gray-500" />
+                                <div className="flex-1">
+                                  <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                                    {primaryLine || t('viewer.download')}
+                                  </p>
+                                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                                    {secondaryParts.join(' · ')}
+                                  </p>
+                                </div>
+                                {format.expiresAt && (
+                                  <span className="text-[10px] uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                                    {new Date(format.expiresAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                  </span>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                      {!downloadLoading && !downloadError && !downloadFormats && (
+                        <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
+                          {t('viewer.download.loading')}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
                 <button
                   onClick={handleBookmark}
                   disabled={bookmarkSaving}

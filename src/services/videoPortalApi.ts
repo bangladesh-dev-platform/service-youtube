@@ -56,6 +56,25 @@ export interface HistoryRecord {
   video: VideoPortalItem;
 }
 
+export interface DownloadFormat {
+  id: string;
+  label?: string | null;
+  quality?: string | null;
+  container?: string | null;
+  codec?: string | null;
+  sizeBytes?: number | null;
+  type?: 'video' | 'audio' | string | null;
+  downloadUrl: string;
+  expiresAt?: string | null;
+}
+
+export interface DownloadFormatsPayload {
+  videoId: string;
+  sourceType?: string | null;
+  formats: DownloadFormat[];
+  noFormatsReason?: string | null;
+}
+
 export interface CommentItem {
   id: string;
   video_id: string;
@@ -231,5 +250,43 @@ export const videoPortalApi = {
     await authedRequest(`/api/v1/video/comments/${commentId}`, token, {
       method: 'DELETE',
     });
+  },
+
+  async getDownloadFormats(token: string, videoId: string): Promise<DownloadFormatsPayload> {
+    interface DownloadFormatsApiResponse {
+      video_id: string;
+      source_type?: string | null;
+      formats: Array<{
+        id: string;
+        label?: string | null;
+        quality?: string | null;
+        container?: string | null;
+        codec?: string | null;
+        size_bytes?: number | null;
+        type?: 'video' | 'audio' | string | null;
+        download_url: string;
+        expires_at?: string | null;
+      }>;
+      no_formats_reason?: string | null;
+    }
+
+    const data = await authedRequest<DownloadFormatsApiResponse>(`/api/v1/video/${videoId}/downloads`, token);
+
+    return {
+      videoId: data.video_id,
+      sourceType: data.source_type ?? null,
+      noFormatsReason: data.no_formats_reason ?? null,
+      formats: data.formats.map(format => ({
+        id: format.id,
+        label: format.label ?? null,
+        quality: format.quality ?? null,
+        container: format.container ?? null,
+        codec: format.codec ?? null,
+        sizeBytes: format.size_bytes ?? null,
+        type: format.type ?? null,
+        downloadUrl: format.download_url,
+        expiresAt: format.expires_at ?? null,
+      })),
+    };
   },
 };
